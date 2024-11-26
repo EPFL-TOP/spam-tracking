@@ -91,8 +91,7 @@ class ProcessingWidget(QWidget):
             visible=True,
         )
 
-        # Initialize Tracks layer with a minimal valid placeholder
-        placeholder_track = np.array([[0, 0, 0, 0, 0]])  # [track_id, time, z, y, x]
+        placeholder_track = np.array([[0, 0, 0, 0, 0]])  # [track_id, channel, time, z, y, x]
         self.tracks_layer = viewer.add_tracks(
             data=placeholder_track,
             name="Tracks",
@@ -264,7 +263,9 @@ class ProcessingWidget(QWidget):
         self.image_layer_name=dataset_name
         with h5py.File(file_path, 'r') as hdf_file:
             data = hdf_file[dataset_name][:]
-            self.viewer.add_image(data, name=dataset_name, scale=(1, 1, 1, 1), multiscale=False)
+            print('data hdf5 shape ', data.shape)
+            #data = data.transpose(0,2,3,4,1)
+            self.viewer.add_image(data, name=dataset_name, channel_axis=1)#, scale=(1, 1, 1, 1), multiscale=False)
 
 
 #_____________________________________________________________________________________
@@ -333,11 +334,11 @@ class ProcessingWidget(QWidget):
             dy=self.y_box_spinbox.value()
             dz=self.z_box_spinbox.value()
             print('dx, dy, dz ',dx,' ',dy,' ',dz)
+            print('image layer shape ',image_layer_data.shape)
             reg=None
             if way>0:
                 for t in range(int(current_time) + 1, num_time_points):
 
-                    print('reg ',reg)
                     reg = spam.DIC.register(
                         image_layer_data[t-1,int(z-dz):int(z+dz), int(y-dy):int(y+dy), int(x-dx):int(x+dx)],
                         image_layer_data[t,  int(z-dz):int(z+dz), int(y-dy):int(y+dy), int(x-dx):int(x+dx)],
@@ -346,7 +347,7 @@ class ProcessingWidget(QWidget):
                         im1mask=spam.mesh.structuringElement(radius=dx, dim=3),
                         PhiRigid=True
                         )
-
+                    print('reg ',reg)
                     print('reg[Phi][0:3,-1] ',reg['Phi'][0:3,-1])
                     new_point = np.array([t, int(z+reg['Phi'][0:3,-1][0]) , int(y+reg['Phi'][0:3,-1][1]), int(x+reg['Phi'][0:3,-1][2])])
                     self.tracked_points_layer.data = np.vstack([self.tracked_points_layer.data, new_point])
@@ -379,7 +380,7 @@ class ProcessingWidget(QWidget):
     def update_tracks(self, event=None):
 
         tracks = []
-
+        print('self.full_track_data  ',self.full_track_data)
         for track_id in self.full_track_data:
             track_array = np.zeros((len(self.full_track_data[track_id]), 10), dtype=np.float32)
             track = np.array(self.full_track_data[track_id])
@@ -407,7 +408,6 @@ class ProcessingWidget(QWidget):
             track_array[:, 9] = distance
 
             tracks.append(track_array)
-
         tracks = np.concatenate(tracks, axis=0)
         data = tracks[:, :5]  # just the coordinate data
 
