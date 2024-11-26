@@ -18,18 +18,9 @@ contributions:
     - id: spam-tracking.make_sample_data
       python_name: spam_tracking._sample_data:make_sample_data
       title: Load sample data from SPAM tracking
-    - id: spam-tracking.make_container_widget
-      python_name: spam_tracking:ImageThreshold
-      title: Make threshold Container widget
-    - id: spam-tracking.make_magic_widget
-      python_name: spam_tracking:threshold_magic_widget
-      title: Make threshold magic widget
-    - id: spam-tracking.make_function_widget
-      python_name: spam_tracking:threshold_autogenerate_widget
-      title: Make threshold function widget
-    - id: spam-tracking.make_qwidget
-      python_name: spam_tracking:ExampleQWidget
-      title: Make example QWidget
+    - id: spam-tracking.make_qwidget_spam
+      python_name: spam_tracking:ProcessingWidget
+      title: Make example QWidget SPAM
   readers:
     - command: spam-tracking.get_reader
       accepts_directories: false
@@ -46,12 +37,5 @@ contributions:
       display_name: SPAM tracking
       key: unique_id.1
   widgets:
-    - command: spam-tracking.make_container_widget
-      display_name: Container Threshold
-    - command: spam-tracking.make_magic_widget
-      display_name: Magic Threshold
-    - command: spam-tracking.make_function_widget
-      autogenerate: true
-      display_name: Autogenerate Threshold
-    - command: spam-tracking.make_qwidget
-      display_name: Example QWidget
+    - command: spam-tracking.make_qwidget_spam
+      display_name: SPAM tracking
