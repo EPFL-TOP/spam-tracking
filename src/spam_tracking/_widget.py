@@ -64,10 +64,17 @@ class ProcessingWidget(QWidget):
         self.forward_button.clicked.connect(self.track_forward)
         self.backward_button.clicked.connect(self.track_backward)
 
+        self.delete_tracks_button = QPushButton("Delete tracks")
+        self.layout().addWidget(self.delete_tracks_button)
+        self.delete_tracks_button.clicked.connect(self.on_delete_tracks)
+
         self.cellpose_button = QPushButton("CellPose seg")
         self.layout().addWidget(self.cellpose_button)
         self.cellpose_button.clicked.connect(self.cellpose_seg)
 
+        self.cellpose_button_tracking = QPushButton("CellPose seg after tracking")
+        self.layout().addWidget(self.cellpose_button_tracking)
+        self.cellpose_button_tracking.clicked.connect(self.cellpose_seg_tracking)
 
         #to display selected points for tracking
         self.points_layer = self.viewer.add_points(
@@ -112,6 +119,79 @@ class ProcessingWidget(QWidget):
         #self.tracked_points_layer.events.selected_data.connect(self.select_track)
         self.viewer.dims.events.current_step.connect(self.update_z_layer)
 
+#_____________________________________________________________________________________
+    def cellpose_seg_tracking(self):
+        channels = [[1,2]]
+        diameter = 25 
+        cellprob_threshold = -1
+        print('self.viewer.layers ',self.viewer.layers)
+        image_layer_data = self.viewer.layers[0].data#.get(self.image_layer_name)
+        image_layer_data1 = self.viewer.layers[1].data#.get(self.image_layer_name)
+        print('image_layer shape ',image_layer_data.shape)
+
+
+        for p in self.full_track_data:
+            seg_layer=[]
+            points=self.full_track_data[p]
+            for point in points:
+                print(' point ',point)
+                image_layer_data_box  = image_layer_data [int(point[0]), int(point[1]-15):int(point[1]+15), int(point[2]-25):int(point[2]+25), int(point[3]-25):int(point[3]+25) ]
+                image_layer_data_box1 = image_layer_data1[int(point[0]), int(point[1]-15):int(point[1]+15), int(point[2]-25):int(point[2]+25), int(point[3]-25):int(point[3]+25) ]
+                print('image_layer_data_box shape ',image_layer_data_box.shape)
+                print('image_layer_data_box1 shape ',image_layer_data_box1.shape)
+                result = np.stack([image_layer_data_box, image_layer_data_box1], axis=0)
+                print('merge images shape ',result.shape)
+                masks, flows, styles = model.eval(result, diameter=diameter, channels=channels, channel_axis=0,
+										        cellprob_threshold=cellprob_threshold, 
+										        do_3D=True, anisotropy=1.5, min_size=1000)
+
+
+                print('masks shape ',masks.shape)
+                full_image_mask = np.zeros((image_layer_data.shape[1], image_layer_data.shape[2], image_layer_data.shape[3]), dtype=np.uint8)
+
+                subimage_half_shape = (image_layer_data_box.shape[0] // 2, image_layer_data_box.shape[1] // 2, image_layer_data_box.shape[2] // 2)
+                print('subimage_half_shape ', subimage_half_shape)
+                # Calculate start and end indices in the full image
+                z_start = max(int(point[1]) - subimage_half_shape[0], 0)
+                y_start = max(int(point[2]) - subimage_half_shape[1], 0)
+                x_start = max(int(point[3]) - subimage_half_shape[2], 0)
+
+                z_end = min(int(point[1]) + subimage_half_shape[0] , image_layer_data.shape[1])
+                y_end = min(int(point[2]) + subimage_half_shape[1] , image_layer_data.shape[2])
+                x_end = min(int(point[3]) + subimage_half_shape[2] , image_layer_data.shape[3])
+
+                # Calculate the corresponding region in the subimage
+                sub_z_start = max(subimage_half_shape[0] - int(point[1]), 0)
+                sub_y_start = max(subimage_half_shape[1] - int(point[2]), 0)
+                sub_x_start = max(subimage_half_shape[2] - int(point[3]), 0)
+
+                sub_z_end = sub_z_start + (z_end - z_start)
+                sub_y_end = sub_y_start + (y_end - y_start)
+                sub_x_end = sub_x_start + (x_end - x_start)
+
+                print("Full image slice: ", z_start, z_end, y_start, y_end, x_start, x_end)
+                print("Subimage slice  : ", sub_z_start, sub_z_end, sub_y_start, sub_y_end, sub_x_start, sub_x_end)
+
+                # Insert the subimage mask into the full image mask
+                print('full_image_mask[z_start:z_end, y_start:y_end, x_start:x_end] shape               ',full_image_mask[z_start:z_end, y_start:y_end, x_start:x_end].shape)
+                print('masks[sub_z_start:sub_z_end, sub_y_start:sub_y_end, sub_x_start:sub_x_end] shape ',masks[sub_z_start:sub_z_end, sub_y_start:sub_y_end, sub_x_start:sub_x_end].shape)
+                full_image_mask[z_start:z_end, y_start:y_end, x_start:x_end] = \
+                    masks[sub_z_start:sub_z_end, sub_y_start:sub_y_end, sub_x_start:sub_x_end]
+
+
+                #full_image_mask[z_start:z_end, y_start:y_end, x_start:x_end] = masks
+                #full_image_mask = np.expand_dims(full_image_mask, axis=1)
+                print('full_image_mask ',full_image_mask.shape)
+                seg_layer.append(full_image_mask)
+
+            self.viewer.add_labels(
+                np.array(seg_layer),
+                name="cell pose maks",
+                #scale=(1, 1, 1, 1),
+                #colormap="gray"
+            )
+
+
 
 #_____________________________________________________________________________________
     def cellpose_seg(self):
@@ -120,34 +200,41 @@ class ProcessingWidget(QWidget):
         cellprob_threshold = -1
         print('self.viewer.layers ',self.viewer.layers)
         image_layer_data = self.viewer.layers[0].data#.get(self.image_layer_name)
+        image_layer_data1 = self.viewer.layers[1].data#.get(self.image_layer_name)
         print('image_layer shape ',image_layer_data.shape)
+
+
 
         for point in self.selected_points:
             
             print(' point ',point)
-            image_layer_data_box=image_layer_data[int(point[1]-15):int(point[1]+15), :, int(point[3]-25):int(point[3]+25), int(point[4]-25):int(point[4]+25) ]
+            image_layer_data_box  = image_layer_data [int(point[1]), int(point[2]-15):int(point[2]+15), int(point[3]-25):int(point[3]+25), int(point[4]-25):int(point[4]+25) ]
+            image_layer_data_box1 = image_layer_data1[int(point[1]), int(point[2]-15):int(point[2]+15), int(point[3]-25):int(point[3]+25), int(point[4]-25):int(point[4]+25) ]
             print('image_layer_data_box shape ',image_layer_data_box.shape)
-            masks, flows, styles = model.eval(image_layer_data_box, diameter=diameter, channels=channels, 
+            print('image_layer_data_box1 shape ',image_layer_data_box1.shape)
+            result = np.stack([image_layer_data_box, image_layer_data_box1], axis=0)
+            print('merge images shape ',result.shape)
+            masks, flows, styles = model.eval(result, diameter=diameter, channels=channels, channel_axis=0,
 										    cellprob_threshold=cellprob_threshold, 
 										    do_3D=True, anisotropy=1.5, min_size=1000)
 
 
             print('masks shape ',masks.shape)
-            full_image_mask = np.zeros((image_layer_data.shape[0], image_layer_data.shape[2], image_layer_data.shape[3]), dtype=np.uint8)
+            full_image_mask = np.zeros((image_layer_data.shape[1], image_layer_data.shape[2], image_layer_data.shape[3]), dtype=np.uint8)
 
-            subimage_half_shape = (image_layer_data_box.shape[0] // 2, image_layer_data_box.shape[2] // 2, image_layer_data_box.shape[3] // 2)
+            subimage_half_shape = (image_layer_data_box.shape[0] // 2, image_layer_data_box.shape[1] // 2, image_layer_data_box.shape[2] // 2)
             print('subimage_half_shape ', subimage_half_shape)
             # Calculate start and end indices in the full image
-            z_start = max(int(point[1]) - subimage_half_shape[0], 0)
+            z_start = max(int(point[2]) - subimage_half_shape[0], 0)
             y_start = max(int(point[3]) - subimage_half_shape[1], 0)
             x_start = max(int(point[4]) - subimage_half_shape[2], 0)
 
-            z_end = min(int(point[1]) + subimage_half_shape[0] , image_layer_data.shape[0])
+            z_end = min(int(point[2]) + subimage_half_shape[0] , image_layer_data.shape[1])
             y_end = min(int(point[3]) + subimage_half_shape[1] , image_layer_data.shape[2])
             x_end = min(int(point[4]) + subimage_half_shape[2] , image_layer_data.shape[3])
 
             # Calculate the corresponding region in the subimage
-            sub_z_start = max(subimage_half_shape[0] - int(point[1]), 0)
+            sub_z_start = max(subimage_half_shape[0] - int(point[2]), 0)
             sub_y_start = max(subimage_half_shape[1] - int(point[3]), 0)
             sub_x_start = max(subimage_half_shape[2] - int(point[4]), 0)
 
@@ -155,8 +242,8 @@ class ProcessingWidget(QWidget):
             sub_y_end = sub_y_start + (y_end - y_start)
             sub_x_end = sub_x_start + (x_end - x_start)
 
-            print("Full image slice:", z_start, z_end, y_start, y_end, x_start, x_end)
-            print("Subimage slice:", sub_z_start, sub_z_end, sub_y_start, sub_y_end, sub_x_start, sub_x_end)
+            print("Full image slice: ", z_start, z_end, y_start, y_end, x_start, x_end)
+            print("Subimage slice  : ", sub_z_start, sub_z_end, sub_y_start, sub_y_end, sub_x_start, sub_x_end)
 
             # Insert the subimage mask into the full image mask
             print('full_image_mask[z_start:z_end, y_start:y_end, x_start:x_end] shape               ',full_image_mask[z_start:z_end, y_start:y_end, x_start:x_end].shape)
@@ -165,21 +252,21 @@ class ProcessingWidget(QWidget):
                 masks[sub_z_start:sub_z_end, sub_y_start:sub_y_end, sub_x_start:sub_x_end]
 
 
-            # Insert the subimage mask into the full image mask
             #full_image_mask[z_start:z_end, y_start:y_end, x_start:x_end] = masks
-            full_image_mask = np.expand_dims(full_image_mask, axis=1)
+            #full_image_mask = np.expand_dims(full_image_mask, axis=1)
             print('full_image_mask ',full_image_mask.shape)
+            array_expanded = np.expand_dims(full_image_mask, axis=0)
+            print('full_image_mask exp dim',array_expanded.shape)
 
-                    # Add the new 2D+time image to Napari
             self.viewer.add_labels(
-                full_image_mask,
+                array_expanded,
                 name="cell pose maks",
-                #scale=(1, 1),  # Adjust if necessary
+                #scale=(1, 1, 1, 1),
                 #colormap="gray"
             )
 
             io.save_masks(
-                full_image_mask,
+                array_expanded,
                 masks,
                 flows,
                 "/mnt/d/Clement/testmask",
@@ -272,8 +359,9 @@ class ProcessingWidget(QWidget):
     def add_point(self, layer, event):
         time = self.viewer.dims.current_step[0]
         spatial_coords = event.position[-3:]  # (z, y, x)
+        print('event position ',event.position)
         coords = np.array([time, *spatial_coords])
-
+        print ('adding point coords (t,z,y,x) ', coords) 
         if len(self.points_layer.data) > 0:
             self.points_layer.data = np.vstack([self.points_layer.data, coords])
         else:
@@ -281,6 +369,13 @@ class ProcessingWidget(QWidget):
 
         self.selected_points.append(np.array([self.current_id, *coords]))
         self.current_id += 1
+
+
+#_____________________________________________________________________________________
+    def on_delete_tracks(self):
+        self.full_track_data = {}
+        self.tracked_points_layer.data = []
+        self.tracks_layer.data =  np.array([[0, 0, 0, 0, 0]])
 
 
 #_____________________________________________________________________________________
