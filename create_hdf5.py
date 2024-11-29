@@ -42,7 +42,7 @@ with h5py.File(hdf5_path, 'w') as hdf_file:
         for ch in range(num_channels):
 #            # Construct the filename pattern for each time point and channel
             print('  channel: ',ch+1)
-            filename = os.path.join(tiff_dir, f't{t+1:04}_Channel {ch+1}.tif')
+            filename = os.path.join(tiff_dir, f't{t+1+starting_point:04}_Channel {ch+1}.tif')
             data = tifffile.imread(filename)
             data = data[50:230,980:1380,840:1240]
             print('shape ',data.shape)
